@@ -1,8 +1,8 @@
 /**
  * 路由配置
  */
-import {createRouter, createWebHistory, type RouteRecordRaw} from 'vue-router'
-import { getToken } from "@/api/request";
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { getToken } from '@/api/request'
 
 // 导入模块路由
 import statsRoutes from './modules/stats'
@@ -22,7 +22,8 @@ const baseRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/Login.vue'),
     meta: {
       title: '登录',
-      layout: false,  // 不使用布局
+      layout: false,
+      requiresAuth: false,
     },
   },
   {
@@ -32,6 +33,7 @@ const baseRoutes: RouteRecordRaw[] = [
     meta: {
       title: '页面不存在',
       layout: false,
+      requiresAuth: false,
     },
   },
 ]
@@ -75,11 +77,11 @@ router.beforeEach((to, from, next) => {
     // 需要登录单没有 Token, 跳转到登录页面
     next({
       path: '/login',
-      query: { redirect: to.fullPath }
+      query: { redirect: to.fullPath },
     })
   } else if (to.path === '/login' && hasValidToken) {
-    // 已登录单访问登录页，跳转到首页
-    next({ path: '/' })
+    // 已登录但访问登录页，跳转首页
+    next('/')
   } else {
     next()
   }

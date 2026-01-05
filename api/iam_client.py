@@ -12,13 +12,13 @@ from .config import settings
 
 
 class UserContext(BaseModel):
-    """用户是上下文"""
+    """用户上下文"""
     user_id: str
     org_id: str
     roles: List[str] = []
     perm_ver: Optional[int] = None
 
-    # 拓展信息（从 IAM 获取）
+    # 扩展信息（从 IAM 获取）
     username: Optional[str] = None
     org_name: Optional[str] = None
 
@@ -31,7 +31,7 @@ class IAMClient:
         self.app_code = settings.iam_app_code
         self._jwks_cache = None
         self._jwks_cache_time = 0
-        self._jwks_cache_ttl = 86400
+        self._jwks_cache_ttl = 86400  # 24小时
 
     def _get_jwks(self) -> Dict:
         """获取 JWKS 公钥（带缓存）"""
@@ -62,23 +62,23 @@ class IAMClient:
         # 解析 token header 获取 kid
         try:
             unverified_header = jwt.get_unverified_header(token)
-            kid = unverified_header.get("kid")
+            kid = unverified_header.get('kid')
         except JWTError:
-            raise Exception(f"无效的 Token 格式")
+            raise Exception("无效的 Token 格式")
 
         # 查找对应的公钥
-        for key in jwks.get("keys", []):
-            if key.get("kid") == kid:
+        for key in jwks.get('keys', []):
+            if key.get('kid') == kid:
                 return jwk.construct(key)
 
-        # 如果没有 kid， 使用第一个
-        if jwks.get("keys"):
-            return jwk.construct(jwks["keys"][0])
+        # 如果没有 kid，使用第一个
+        if jwks.get('keys'):
+            return jwk.construct(jwks['keys'][0])
 
-        raise Exception(f"没有找到对应的公钥")
+        raise Exception("未找到匹配的公钥")
 
     def verify_token(self, token: str) -> UserContext:
-        """验证 JWK Token 并返回用户上下文"""
+        """验证 JWT Token 并返回用户上下文"""
         try:
             # 获取公钥
             public_key = self._get_public_key(token)
@@ -87,18 +87,18 @@ class IAMClient:
             payload = jwt.decode(
                 token,
                 public_key,
-                algorithms=["RS256"],
+                algorithms=['RS256'],
                 options={
-                    "verify_aud": False, # 暂不验证audience
-                    "verify_exp": True,
+                    'verify_aud': False,  # 暂不验证 audience
+                    'verify_exp': True,
                 }
             )
 
             return UserContext(
-                user_id=payload.get("sub"),
-                org_id=payload.get("org_id"),
-                roles=payload.get("roles", []),
-                perm_ver=payload.get("perm_ver"),
+                user_id=payload.get('sub'),
+                org_id=payload.get('org_id'),
+                roles=payload.get('roles', []),
+                perm_ver=payload.get('perm_ver'),
             )
 
         except jwt.ExpiredSignatureError:
@@ -112,14 +112,14 @@ class IAMClient:
             with httpx.Client(timeout=10) as client:
                 resp = client.get(
                     f"{self.base_url}/me/menus",
-                    params={"app": self.app_code},
-                    headers={"Authorization": f"Bearer {token}"}
+                    params={'app': self.app_code},
+                    headers={'Authorization': f'Bearer {token}'}
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                return data.get("data", [])
+                return data.get('data', [])
         except Exception as e:
-            raise Exception(f"获取用户菜单失败: {e}")
+            raise Exception(f"获取菜单失败: {e}")
 
     def evaluate_policy(self, token: str, resource: str, action: str = None) -> bool:
         """评估权限"""
@@ -128,14 +128,14 @@ class IAMClient:
                 resp = client.post(
                     f"{self.base_url}/policy/evaluate",
                     json={
-                        "resource": resource,
-                        "action": action or resource,
+                        'resource': resource,
+                        'action': action or resource,
                     },
-                    headers={"Authorization": f"Bearer {token}"}
+                    headers={'Authorization': f'Bearer {token}'}
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                return data.get("data", {}).get('allowed', False)
+                return data.get('data', {}).get('allowed', False)
         except Exception:
             return False
 
@@ -145,15 +145,15 @@ class IAMClient:
             with httpx.Client(timeout=10) as client:
                 resp = client.get(
                     f"{self.base_url}/policy/data-scope",
-                    params={"domain": domain},
-                    headers={"Authorization": f"Bearer {token}"}
+                    params={'domain': domain},
+                    headers={'Authorization': f'Bearer {token}'}
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                return data.get("data", {})
+                return data.get('data', {})
         except Exception as e:
-            # 默认返回尽自己
-            return { 'scope': 'SELF', 'org_ids': None. 'user_id': None }
+            # 默认返回仅自己
+            return {'scope': 'SELF', 'org_ids': None, 'user_id': None}
 
 
 # 单例

@@ -15,13 +15,13 @@ class CurrentUser:
         self.required = required
 
     async def __call__(
-            self,
-            request: Request,
-            user: UserContext = Depends(get_current_user)
+        self,
+        request: Request,
+        user: UserContext = Depends(get_current_user)
     ) -> Optional[UserContext]:
         if self.required and not user:
             from fastapi import HTTPException
-            raise HTTPException(status_code=401, detail="未登录")
+            raise HTTPException(status_code=401, detail="需要登录")
         return user
 
 
