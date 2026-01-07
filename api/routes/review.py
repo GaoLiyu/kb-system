@@ -8,9 +8,15 @@ from typing import List, Optional
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Query
 from fastapi.responses import FileResponse
 
-from ..auth import verify_token
+from ..dependencies import (
+    CurrentUser,
+    RequireRoles,
+    OrgScoped,
+    RequirePermission,
+)
 from ..config import settings
 from .kb import get_system
+from ..iam_client import UserContext
 from ..task_manager import ReviewTaskManager, submit_review_task
 
 router = APIRouter(prefix="/review", tags=["审查"])
@@ -24,7 +30,7 @@ router = APIRouter(prefix="/review", tags=["审查"])
 async def submit_review(
     file: UploadFile = File(...),
     mode: str = Query("full", description="审查模式: quick/full"),
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(RequireRoles("admin", "reviewer"))
 ):
     """
     提交异步审查任务
@@ -74,7 +80,7 @@ async def submit_review(
 async def submit_batch_review(
     files: List[UploadFile] = File(...),
     mode: str = Query("quick", description="审查模式: quick/full"),
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(RequireRoles("admin", "reviewer"))
 ):
     """
     批量提交审查任务
@@ -121,7 +127,7 @@ async def submit_batch_review(
 @router.get("/task/{task_id}", summary="查询任务状态")
 async def get_task_status(
     task_id: str,
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(RequireRoles("viewer"))
 ):
     """
     查询审查任务状态和结果
@@ -141,7 +147,7 @@ async def list_tasks(
     status: str = Query(None, description="筛选状态: pending/running/completed/failed"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(RequireRoles("viewer"))
 ):
     """
     获取审查任务列表
@@ -159,7 +165,7 @@ async def list_tasks(
 @router.delete("/task/{task_id}", summary="删除任务")
 async def delete_task(
     task_id: str,
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(RequireRoles("admin", "reviewer"))
 ):
     """
     删除审查任务
@@ -175,7 +181,7 @@ async def delete_task(
 async def export_task_result(
     task_id: str,
     include_original: bool = False,
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(RequireRoles("admin", "reviewer"))
 ):
     """
     导出审查任务结果为 Word 文档
@@ -228,7 +234,7 @@ async def export_task_result(
 @router.post("/validate", summary="快速校验（同步）")
 async def validate_report(
     file: UploadFile = File(...),
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(RequireRoles("admin", "reviewer"))
 ):
     """快速校验，仅规则检查，不调用 LLM"""
     ext = os.path.splitext(file.filename)[1].lower()
@@ -267,7 +273,7 @@ async def validate_report(
 @router.post("/extract", summary="仅提取（同步）")
 async def extract_report(
     file: UploadFile = File(...),
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(RequireRoles("admin", "reviewer"))
 ):
     """仅提取报告内容，不做审查"""
     from extractors import extract_report as do_extract

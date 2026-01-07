@@ -6,10 +6,17 @@ import os
 from typing import List, Optional
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Query
 
-from ..auth import verify_token
+from ..auth import get_current_user, require_editor, require_viewer
 from ..config import settings
 from main import RealEstateKBSystem
 from utils import detect_report_type
+from ..dependencies import (
+    CurrentUser,
+    RequireRoles,
+    OrgScoped,
+    RequirePermission,
+)
+from ..iam_client import UserContext
 
 router = APIRouter(prefix="/kb", tags=["知识库"])
 
@@ -32,7 +39,7 @@ async def list_reports(
     keyword: str = Query(None, description="关键词搜索"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(CurrentUser(required=False))
 ):
     """
     获取报告列表（分页）
@@ -79,7 +86,7 @@ async def list_cases(
     max_price: float = Query(None, description="最高价格"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(CurrentUser(required=False))
 ):
     """
     获取案例列表（分页+筛选）
@@ -142,7 +149,7 @@ async def list_cases(
 @router.get("/case/{case_id}", summary="案例详情")
 async def get_case_detail(
     case_id: str,
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(CurrentUser(required=False))
 ):
     """
     获取案例详情
@@ -162,7 +169,7 @@ async def get_case_detail(
 @router.get("/report/{doc_id}", summary="报告详情")
 async def get_report_detail(
     doc_id: str,
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(CurrentUser(required=False))
 ):
     """
     获取报告详情（包含所有案例）
@@ -181,7 +188,7 @@ async def get_report_detail(
 
 @router.get("/filters", summary="获取筛选选项")
 async def get_filter_options(
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(CurrentUser(required=False))
 ):
     """
     获取可用的筛选选项（区域、用途等）
@@ -213,7 +220,7 @@ async def get_filter_options(
 async def upload_report(
     file: UploadFile = File(...),
     report_type: str = None,
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(require_editor)
 ):
     """上传报告到知识库"""
     ext = os.path.splitext(file.filename)[1].lower()
@@ -246,7 +253,7 @@ async def upload_report(
 async def batch_upload_reports(
     files: List[UploadFile] = File(...),
     report_type: str = None,
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(require_editor)
 ):
     """批量上传报告到知识库"""
     results = []
@@ -307,7 +314,7 @@ async def batch_upload_reports(
 @router.delete("/report/{doc_id}", summary="删除报告")
 async def delete_report(
     doc_id: str,
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(require_editor)
 ):
     """删除报告及其案例"""
     system = get_system()
@@ -320,7 +327,7 @@ async def delete_report(
 
 
 @router.get("/stats", summary="统计信息")
-async def get_stats(auth: bool = Depends(verify_token)):
+async def get_stats(user: UserContext = Depends(require_viewer)):
     """获取知识库统计"""
     system = get_system()
     return {

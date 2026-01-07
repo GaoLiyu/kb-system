@@ -7,9 +7,14 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from ..auth import verify_token
 from ..config import settings
-
+from ..dependencies import (
+    CurrentUser,
+    RequireRoles,
+    OrgScoped,
+    RequirePermission,
+)
+from ..iam_client import UserContext
 
 router = APIRouter(prefix="/search", tags=["搜索"])
 
@@ -100,7 +105,7 @@ def get_system():
 # ============================================================================
 
 @router.post("/cases", summary="搜索案例（字段匹配）")
-def search_cases(req: SearchRequest, auth: bool = Depends(verify_token)):
+def search_cases(req: SearchRequest, user: UserContext = Depends(RequireRoles("viewer"))):
     """
     按字段搜索案例
     
@@ -128,7 +133,7 @@ def search_cases(req: SearchRequest, auth: bool = Depends(verify_token)):
 
 
 @router.post("/similar", summary="语义相似搜索（向量）")
-def search_similar(req: VectorSearchRequest, auth: bool = Depends(verify_token)):
+def search_similar(req: VectorSearchRequest, user: UserContext = Depends(RequireRoles("viewer"))):
     """
     语义相似搜索
     
@@ -154,7 +159,7 @@ def search_similar(req: VectorSearchRequest, auth: bool = Depends(verify_token))
 
 
 @router.post("/hybrid", summary="混合搜索（向量+规则）")
-def search_hybrid(req: HybridSearchRequest, auth: bool = Depends(verify_token)):
+def search_hybrid(req: HybridSearchRequest, user: UserContext = Depends(RequireRoles("viewer"))):
     """
     混合搜索
     
@@ -185,7 +190,7 @@ def search_hybrid(req: HybridSearchRequest, auth: bool = Depends(verify_token)):
 
 
 @router.get("/cases/{case_id}", summary="案例详情")
-def get_case(case_id: str, auth: bool = Depends(verify_token)):
+def get_case(case_id: str, user: UserContext = Depends(RequireRoles("viewer"))):
     """获取案例详情"""
     system = get_system()
     case = system.kb.get_case(case_id)
@@ -198,7 +203,7 @@ def get_case(case_id: str, auth: bool = Depends(verify_token)):
 @router.get("/stats/price", summary="价格统计")
 def get_price_stats(
     report_type: Optional[str] = None,
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(RequireRoles("viewer"))
 ):
     """获取价格范围统计"""
     system = get_system()
@@ -208,7 +213,7 @@ def get_price_stats(
 @router.get("/stats/area", summary="面积统计")
 def get_area_stats(
     report_type: Optional[str] = None,
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(RequireRoles("viewer"))
 ):
     """获取面积范围统计"""
     system = get_system()
@@ -218,7 +223,7 @@ def get_area_stats(
 @router.get("/stats/correction", summary="修正系数统计")
 def get_correction_stats(
     report_type: Optional[str] = None,
-    auth: bool = Depends(verify_token)
+    user: UserContext = Depends(RequireRoles("viewer"))
 ):
     """获取修正系数统计"""
     system = get_system()
