@@ -11,6 +11,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: '报告管理',
       icon: 'Folder',
+      permissions: ['kb:view'],
     },
   },
   {
@@ -20,6 +21,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: '报告详情',
       hidden: true,
+      permissions: ['kb:view'],
     },
   },
   {
@@ -29,6 +31,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: '案例搜索',
       icon: 'Search',
+      permissions: ['search:case'],
     },
   },
   {
@@ -38,6 +41,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: '案例详情',
       hidden: true,
+      permissions: ['search:case'],
     },
   },
 ]

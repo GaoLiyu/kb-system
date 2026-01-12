@@ -1,21 +1,17 @@
 /**
  * 路由配置
  */
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import { getToken } from '@/api/request'
+import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
 
 // 导入模块路由
-import statsRoutes from './modules/stats'
 import kbRoutes from './modules/kb'
 import reviewRoutes from './modules/review'
-import generateRoutes from './modules/generate'
+import statsRoutes from './modules/stats'
+import generateRoutes from "./modules/generate.ts";
 
-// 基础路由（不需要登录）
+// 基础路由（无需登录）
 const baseRoutes: RouteRecordRaw[] = [
-  {
-    path: '/',
-    redirect: '/dashboard',
-  },
   {
     path: '/login',
     name: 'Login',
@@ -23,68 +19,87 @@ const baseRoutes: RouteRecordRaw[] = [
     meta: {
       title: '登录',
       layout: false,
-      requiresAuth: false,
     },
   },
   {
-    path: '/:pathMatch(.*)*',
+    path: '/403',
+    name: 'Forbidden',
+    component: () => import('@/views/403.vue'),
+    meta: {
+      title: '无权限',
+      layout: false,
+    },
+  },
+  {
+    path: '/404',
     name: 'NotFound',
     component: () => import('@/views/NotFound.vue'),
     meta: {
       title: '页面不存在',
       layout: false,
-      requiresAuth: false,
     },
   },
 ]
 
-// 业务路由（使用布局，需要登录）
+// 业务路由（需要登录）
 const businessRoutes: RouteRecordRaw[] = [
-  ...statsRoutes,
-  ...kbRoutes,
-  ...reviewRoutes,
-  ...generateRoutes,
-].map(route => ({
-  ...route,
-  meta: {
-    ...route.meta,
-    requiresAuth: true,
+  // 首页重定向
+  {
+    path: '/',
+    redirect: '/dashboard',
   },
-}))
+
+  // 统计面板
+  ...statsRoutes,
+
+  // 知识库
+  ...kbRoutes,
+
+
+  // 审查
+  ...reviewRoutes,
+
+
+  // 报告生成
+    ...generateRoutes,
+
+  // 系统管理 - 操作日志
+  {
+    path: '/system/audit',
+    name: 'AuditLogs',
+    component: () => import('@/views/system/AuditLogs.vue'),
+    meta: {
+      title: '操作日志',
+      icon: 'Document',
+      roles: ['admin', 'super_admin'],
+    },
+  },
+]
+
+// 404 兜底路由
+const fallbackRoute: RouteRecordRaw = {
+  path: '/:pathMatch(.*)*',
+  redirect: '/404',
+}
 
 // 合并所有路由
 const routes: RouteRecordRaw[] = [
   ...baseRoutes,
   ...businessRoutes,
+  fallbackRoute,
 ]
 
+// 创建路由实例
 const router = createRouter({
   history: createWebHistory(),
   routes,
-})
-
-// 路由守卫
-router.beforeEach((to, from, next) => {
-  // 设置页面标题
-  const title = to.meta?.title as string
-  document.title = title ? `${title} - 估价知识库` : '估价知识库'
-
-  // 检查是否需要登录
-  const requiresAuth = to.meta?.requiresAuth !== false
-  const hasValidToken = !!getToken()
-
-  if (requiresAuth && !hasValidToken) {
-    // 需要登录单没有 Token, 跳转到登录页面
-    next({
-      path: '/login',
-      query: { redirect: to.fullPath },
-    })
-  } else if (to.path === '/login' && hasValidToken) {
-    // 已登录但访问登录页，跳转首页
-    next('/')
-  } else {
-    next()
-  }
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    } else {
+      return { top: 0 }
+    }
+  },
 })
 
 export default router

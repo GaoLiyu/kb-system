@@ -11,6 +11,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: '审查任务',
       icon: 'List',
+      permissions: ['review:view'],
     },
   },
   {
@@ -20,6 +21,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: '任务详情',
       hidden: true,
+      permissions: ['review:view'],
     },
   },
   {
@@ -29,6 +31,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: '即时审查',
       icon: 'Lightning',
+      permissions: ['review:submit'],
     },
   },
 ]

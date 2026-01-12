@@ -3,9 +3,11 @@
     <div class="login-card">
       <!-- Logo 和标题 -->
       <div class="login-header">
-        <img src="@/assets/logo.svg" alt="Logo" class="logo" v-if="false" />
-        <h1 class="title">{{ systemConfig?.system.name || '房地产估价知识库系统' }}</h1>
-        <p class="subtitle">{{ systemConfig?.system.description || '' }}</p>
+        <div class="logo-icon">
+          <el-icon :size="48" color="#409EFF"><HomeFilled /></el-icon>
+        </div>
+        <h1 class="title">{{ systemConfig?.system?.name || '房地产估价知识库系统' }}</h1>
+        <p class="subtitle">{{ systemConfig?.system?.description || '' }}</p>
       </div>
 
       <!-- IAM 登录 -->
@@ -14,25 +16,44 @@
           <el-icon><Link /></el-icon>
           使用统一身份认证登录
         </el-button>
-        <p class="iam-hint">将跳转至统一身份认证平台</p>
+        <el-divider>或</el-divider>
       </div>
 
-      <!-- 简单 Token 登录 -->
-      <div v-else class="token-login">
+      <!-- 用户名密码登录 -->
+      <div class="password-login">
         <el-form ref="formRef" :model="form" :rules="rules" @submit.prevent="handleLogin">
-          <el-form-item prop="token">
+          <el-form-item prop="username">
             <el-input
-              v-model="form.token"
+              v-model="form.username"
+              placeholder="请输入用户名"
+              size="large"
+              clearable
+              @keyup.enter="focusPassword"
+            >
+              <template #prefix>
+                <el-icon><User /></el-icon>
+              </template>
+            </el-input>
+          </el-form-item>
+
+          <el-form-item prop="password">
+            <el-input
+              ref="passwordRef"
+              v-model="form.password"
               type="password"
-              placeholder="请输入访问令牌"
+              placeholder="请输入密码"
               size="large"
               show-password
               @keyup.enter="handleLogin"
             >
               <template #prefix>
-                <el-icon><Key /></el-icon>
+                <el-icon><Lock /></el-icon>
               </template>
             </el-input>
+          </el-form-item>
+
+          <el-form-item>
+            <el-checkbox v-model="rememberMe">记住我</el-checkbox>
           </el-form-item>
 
           <el-form-item>
@@ -43,14 +64,14 @@
               @click="handleLogin"
               class="login-btn"
             >
-              登录
+              登 录
             </el-button>
           </el-form-item>
         </el-form>
 
         <div class="login-tips">
           <el-text type="info" size="small">
-            提示：请联系管理员获取访问令牌
+            默认管理员: admin / admin123
           </el-text>
         </div>
       </div>
@@ -58,7 +79,7 @@
       <!-- 版本信息 -->
       <div class="version-info">
         <el-text type="info" size="small">
-          v{{ systemConfig?.system.version || '3.0.0' }}
+          v{{ systemConfig?.system?.version || '3.0.0' }}
         </el-text>
       </div>
     </div>
@@ -69,8 +90,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Key, Link } from '@element-plus/icons-vue'
+import { User, Lock, Link, HomeFilled } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { login as apiLogin } from '@/api/modules/user'
 
 const router = useRouter()
 const route = useRoute()
@@ -78,20 +100,29 @@ const userStore = useUserStore()
 
 // 表单
 const formRef = ref()
+const passwordRef = ref()
 const form = ref({
-  token: '',
+  username: '',
+  password: '',
 })
 const rules = {
-  token: [{ required: true, message: '请输入访问令牌', trigger: 'blur' }],
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 
 const loading = ref(false)
+const rememberMe = ref(false)
 
 // 系统配置
 const systemConfig = computed(() => userStore.systemConfig)
 const isIAMEnabled = computed(() => userStore.isIAMEnabled)
 
-// 简单模式登录
+// 聚焦密码框
+function focusPassword() {
+  passwordRef.value?.focus()
+}
+
+// 用户名密码登录
 async function handleLogin() {
   if (!formRef.value) return
 
@@ -100,15 +131,29 @@ async function handleLogin() {
 
     loading.value = true
     try {
-      await userStore.loginWithToken(form.value.token)
+      const res = await apiLogin(form.value.username, form.value.password)
 
-      ElMessage.success('登录成功')
+      if (res.success) {
+        // 保存Token
+        await userStore.loginWithToken(res.token)
 
-      // 跳转到目标页面或首页
-      const redirect = (route.query.redirect as string) || '/'
-      router.push(redirect)
+        // 记住用户名
+        if (rememberMe.value) {
+          localStorage.setItem('remembered_username', form.value.username)
+        } else {
+          localStorage.removeItem('remembered_username')
+        }
+
+        ElMessage.success('登录成功')
+
+        // 跳转到目标页面或首页
+        const redirect = (route.query.redirect as string) || '/'
+        router.push(redirect)
+      } else {
+        ElMessage.error(res.message || '登录失败')
+      }
     } catch (error: any) {
-      ElMessage.error(error.response?.data?.detail || '登录失败，请检查令牌是否正确')
+      ElMessage.error(error.message || '登录失败，请检查网络连接')
     } finally {
       loading.value = false
     }
@@ -117,7 +162,7 @@ async function handleLogin() {
 
 // IAM 登录
 function handleIAMLogin() {
-  const loginUrl = systemConfig.value?.auth.iam_login_url
+  const loginUrl = systemConfig.value?.auth?.iam_login_url
   if (!loginUrl) {
     ElMessage.error('IAM 登录地址未配置')
     return
@@ -128,12 +173,11 @@ function handleIAMLogin() {
   sessionStorage.setItem('login_redirect', redirect)
 
   // 跳转到 IAM 登录页
-  // 登录成功后 IAM 会带着 token 回调到我们的页面
   const callbackUrl = encodeURIComponent(window.location.origin + '/login/callback')
   window.location.href = `${loginUrl}&redirect_uri=${callbackUrl}`
 }
 
-// 处理 IAM 回调（如果 URL 中有 token 参数）
+// 处理 IAM 回调
 async function handleIAMCallback() {
   const token = route.query.token as string
   if (!token) return
@@ -144,12 +188,11 @@ async function handleIAMCallback() {
 
     ElMessage.success('登录成功')
 
-    // 跳转到目标页面或首页
     const redirect = sessionStorage.getItem('login_redirect') || '/'
     sessionStorage.removeItem('login_redirect')
     router.push(redirect)
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '登录失败')
+    ElMessage.error(error.message || '登录失败')
   } finally {
     loading.value = false
   }
@@ -164,6 +207,13 @@ onMounted(async () => {
     } catch (error) {
       console.error('加载系统配置失败', error)
     }
+  }
+
+  // 恢复记住的用户名
+  const rememberedUsername = localStorage.getItem('remembered_username')
+  if (rememberedUsername) {
+    form.value.username = rememberedUsername
+    rememberMe.value = true
   }
 
   // 检查是否是 IAM 回调
@@ -200,12 +250,10 @@ onMounted(async () => {
 
 .login-header {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 32px;
 }
 
-.logo {
-  width: 64px;
-  height: 64px;
+.logo-icon {
   margin-bottom: 16px;
 }
 
@@ -224,6 +272,7 @@ onMounted(async () => {
 
 .iam-login {
   text-align: center;
+  margin-bottom: 16px;
 }
 
 .iam-login .el-button {
@@ -232,21 +281,15 @@ onMounted(async () => {
   font-size: 16px;
 }
 
-.iam-hint {
+.password-login {
   margin-top: 16px;
-  font-size: 12px;
-  color: #909399;
 }
 
-.token-login {
-  margin-top: 20px;
-}
-
-.token-login .el-input {
+.password-login .el-input {
   height: 48px;
 }
 
-.token-login :deep(.el-input__wrapper) {
+.password-login :deep(.el-input__wrapper) {
   padding: 0 16px;
 }
 

@@ -11,6 +11,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: '统计面板',
       icon: 'DataAnalysis',
+      permissions: ['stats:view'],
     },
   },
 ]
