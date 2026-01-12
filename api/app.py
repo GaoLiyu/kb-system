@@ -17,9 +17,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .routes import kb_router, search_router, review_router, generate_router, stats_router
+from .routes import (
+    kb_router,
+    search_router,
+    review_router,
+    generate_router,
+    stats_router,
+    config_router,
+    audit_router,
+    users_router
+)
 
 
 # ============================================================================
@@ -37,6 +47,8 @@ app = FastAPI(
     * **搜索** - 字段搜索、语义搜索、混合搜索
     * **审查** - 完整审查、快速校验、数据提取
     * **生成辅助** - 推荐案例、参考数据、输入验证
+    * **系统配置** - 获取系统配置、用户信息
+    * **审计日志** - 操作日志查询和统计
     
     ## 认证
     
@@ -45,7 +57,7 @@ app = FastAPI(
     Authorization: Bearer your-token-here
     ```
     """,
-    version="2.2.0",
+    version="3.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -74,49 +86,42 @@ app.include_router(search_router, prefix="/api")
 app.include_router(review_router, prefix="/api")
 app.include_router(generate_router, prefix="/api")
 app.include_router(stats_router, prefix="/api")
+app.include_router(config_router, prefix="/api")
+app.include_router(audit_router, prefix="/api")
+app.include_router(users_router, prefix="/api")
+
+
+# ============================================================================
+# 静态文件（前端）
+# ============================================================================
+
+static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+if os.path.exists(static_dir):
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
 
 # ============================================================================
 # 根路由
 # ============================================================================
 
-@app.get("/", tags=["系统"])
-def root():
+@app.get("/api", tags=["系统"])
+def api_root():
     """API根路径"""
     return {
         "name": "房地产估价知识库系统",
-        "version": "2.2.0",
+        "version": "3.0.0",
         "docs": "/docs",
-        "status": "running",
     }
 
 
-@app.get("/health", tags=["系统"])
-def health():
+@app.get("/api/health", tags=["系统"])
+def health_check():
     """健康检查"""
     return {"status": "ok"}
 
 
-@app.get("/api/info", tags=["系统"])
-def api_info():
-    """API信息"""
-    return {
-        "version": "2.2.0",
-        "features": {
-            "vector_search": settings.enable_vector,
-            "llm_review": settings.enable_llm,
-        },
-        "endpoints": {
-            "kb": "/api/kb",
-            "search": "/api/search", 
-            "review": "/api/review",
-            "generate": "/api/generate",
-        },
-    }
-
-
 # ============================================================================
-# 直接运行
+# 启动入口
 # ============================================================================
 
 if __name__ == "__main__":

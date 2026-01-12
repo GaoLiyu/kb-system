@@ -24,14 +24,16 @@
         # scope.org_id 用于过滤数据
         pass
 """
-
-from fastapi import Request, HTTPException, Depends
+import secrets
+import hashlib
+from fastapi import Request, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Optional, List, Set
-from functools import wraps
+from typing import Optional, List, Set, Tuple
 from pydantic import BaseModel
+from datetime import datetime, timedelta
 
 from .config import settings
+from .models.user import User, UserRepository, verify_password
 from .iam_client import iam_client, UserContext
 
 
@@ -113,7 +115,15 @@ async def get_current_user(
     if not token:
         raise HTTPException(status_code=401, detail="未提供认证令牌")
 
-    # IAM 模式
+    # 1. 尝试用户Token验证（本地用户）
+    user = verify_user_token(token)
+    if user:
+        context = user_to_context(user)
+        request.state.user = context
+        request.state.token = token
+        return context
+
+    # 2. IAM 模式
     if settings.iam_enabled:
         try:
             user = iam_client.verify_token(token)
@@ -403,3 +413,147 @@ require_admin = require_roles('admin')
 require_reviewer = require_roles('admin', 'reviewer')
 require_editor = require_roles('admin', 'editor')
 require_viewer = require_roles('admin', 'reviewer', 'editor', 'viewer')
+
+
+# ============================================================================
+# 用户登录相关函数
+# ============================================================================
+
+def generate_token() -> str:
+    """生成随机的Token"""
+    return secrets.token_urlsafe(32)
+
+
+def hash_token(token: str) -> str:
+    """对Token进行哈希（用于存储）"""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def verify_user_token(token: str):
+    """
+    验证用户Token，返回User对象
+    """
+    from knowledge_base.db_connection import pg_cursor
+
+    token_hash = hash_token(token)
+
+    try:
+        with pg_cursor(commit=True) as cursor:
+            # 查找有效Token
+            cursor.execute("""
+               SELECT user_id
+               FROM user_tokens
+               WHERE token_hash = %s
+                 AND expires_at > CURRENT_TIMESTAMP
+           """, (token_hash,))
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            user_id = row[0]
+
+            # 更新最后使用时间
+            cursor.execute("""
+               UPDATE user_tokens
+               SET last_used_at = CURRENT_TIMESTAMP
+               WHERE token_hash = %s
+           """, (token_hash,))
+
+            # 获取用户信息
+            from .models.user import UserRepository
+            return UserRepository.get_by_id(user_id)
+    except Exception:
+        return None
+
+
+def user_to_context(user) -> UserContext:
+    """将User模型转换为UserContext"""
+    return UserContext(
+        user_id=str(user.id),
+        username=user.real_name or user.username,
+        org_id=str(user.org_id) if user.org_id else 'default',
+        org_name=getattr(user, 'org_name', '') or '',
+        roles=user.roles if hasattr(user, 'roles') else [],
+    )
+
+
+def authenticate_user(username: str, password: str, ip_address: str = "") -> tuple:
+    """
+    验证用户名密码
+
+    返回: (User, error_message)
+    """
+    from .models.user import UserRepository, verify_password
+
+    user = UserRepository.get_by_username(username)
+
+    if not user:
+        return None, "用户名或密码错误"
+
+    # 检查用户状态
+    if user.status == 'inactive':
+        return None, "用户已被禁用"
+
+    if user.status == 'locked':
+        return None, "用户已被锁定，请联系管理员"
+
+    # 检查登录失败次数
+    if user.login_fail_count >= 5:
+        UserRepository.update(user.id, status='locked')
+        return None, "登录失败次数过多，账号已被锁定"
+
+    # 验证密码
+    if not verify_password(password, user.password_hash):
+        UserRepository.update_login_info(user.id, ip_address, success=False)
+        remaining = 5 - user.login_fail_count - 1
+        return None, f"用户名或密码错误，还剩 {remaining} 次尝试机会"
+
+    # 登录成功
+    UserRepository.update_login_info(user.id, ip_address, success=True)
+    return user, ""
+
+
+def create_user_token(user, ip_address: str = "", device_info: str = "") -> str:
+    """
+    为用户创建访问Token
+    """
+    from knowledge_base.db_connection import pg_cursor
+
+    token = generate_token()
+    token_hash = hash_token(token)
+
+    # Token有效期
+    token_expire_hours = getattr(settings, 'token_expire_hours', 24)
+    expires_at = datetime.now() + timedelta(hours=token_expire_hours)
+
+    with pg_cursor(commit=True) as cursor:
+        cursor.execute("""
+           INSERT INTO user_tokens (user_id, token_hash, token_type, device_info, ip_address, expires_at)
+           VALUES (%s, %s, 'access', %s, %s, %s)
+       """, (user.id, token_hash, device_info[:200] if device_info else None, ip_address, expires_at))
+
+    return token
+
+
+def revoke_user_token(token: str) -> bool:
+    """
+    撤销Token（登出）
+    """
+    from knowledge_base.db_connection import pg_cursor
+
+    token_hash = hash_token(token)
+
+    with pg_cursor(commit=True) as cursor:
+        cursor.execute("DELETE FROM user_tokens WHERE token_hash = %s", (token_hash,))
+        return cursor.rowcount > 0
+
+
+def revoke_all_user_tokens(user_id: int) -> int:
+    """
+    撤销用户的所有Token
+    """
+    from knowledge_base.db_connection import pg_cursor
+
+    with pg_cursor(commit=True) as cursor:
+        cursor.execute("DELETE FROM user_tokens WHERE user_id = %s", (user_id,))
