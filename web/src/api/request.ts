@@ -42,6 +42,9 @@ export function hasToken(): boolean {
   return !!getToken()
 }
 
+// 防止重复跳转登录页的标志
+let isRedirectingToLogin = false
+
 // 请求拦截器
 api.interceptors.request.use((config) => {
   const token = getToken()
@@ -61,8 +64,23 @@ api.interceptors.response.use(
     // 401 未授权
     if (status === 401) {
       removeToken()
-      ElMessage.error('登录已过期，请重新登录')
-      router.push('/login')
+
+      // 防止重复跳转和循环
+      const currentPath = window.location.pathname
+      if (!isRedirectingToLogin && currentPath !== '/login') {
+        isRedirectingToLogin = true
+        ElMessage.error('登录已过期，请重新登录')
+
+        router.push({
+          path: '/login',
+          query: { redirect: currentPath }
+        }).finally(() => {
+          // 延迟重置标志，防止短时间内多次触发
+          setTimeout(() => {
+            isRedirectingToLogin = false
+          }, 1000)
+        })
+      }
     }
     // 403 无权限
     else if (status === 403) {

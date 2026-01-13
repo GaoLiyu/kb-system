@@ -9,6 +9,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/api/request'
 import { getToken, setToken, removeToken } from '@/api/request'
+import { logout as apiLogout } from '@/api/modules/user'
 
 // 用户信息接口
 export interface UserInfo {
@@ -103,14 +104,14 @@ export const useUserStore = defineStore('user', () => {
       isLoading.value = true
       const res = await api.get('/config/user')
 
-      if (res.data.logged_in) {
+      if (res.logged_in) {
         userInfo.value = {
-          user_id: res.data.user_id,
-          username: res.data.username,
-          org_id: res.data.org_id,
-          org_name: res.data.org_name,
-          roles: res.data.roles,
-          permissions: res.data.permissions,
+          user_id: res.user_id,
+          username: res.username,
+          org_id: res.org_id,
+          org_name: res.org_name,
+          roles: res.roles,
+          permissions: res.permissions,
         }
       } else {
         userInfo.value = null
@@ -156,6 +157,17 @@ export const useUserStore = defineStore('user', () => {
    * 登出
    */
   async function logout() {
+    // 1. 调用后端API撤销Token
+    if (token.value) {
+      try {
+        await apiLogout()
+      } catch (error) {
+        // 即使API调用失败，也继续清除本地状态
+        console.error('登出API调用失败', error)
+      }
+    }
+
+    // 2. 清除本地状态
     token.value = ''
     userInfo.value = null
     removeToken()

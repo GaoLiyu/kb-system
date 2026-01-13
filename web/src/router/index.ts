@@ -9,6 +9,7 @@ import kbRoutes from './modules/kb'
 import reviewRoutes from './modules/review'
 import statsRoutes from './modules/stats'
 import generateRoutes from "./modules/generate.ts";
+import users from "./modules/users.ts"
 
 // 基础路由（无需登录）
 const baseRoutes: RouteRecordRaw[] = [
@@ -55,13 +56,14 @@ const businessRoutes: RouteRecordRaw[] = [
   // 知识库
   ...kbRoutes,
 
-
   // 审查
   ...reviewRoutes,
 
-
   // 报告生成
     ...generateRoutes,
+
+  // 系统管理 - 用户管理
+  ...users,
 
   // 系统管理 - 操作日志
   {

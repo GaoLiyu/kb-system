@@ -80,7 +80,18 @@ class RequireRoles:
         self._checker = require_roles(*roles)
 
     async def __call__(self, request: Request) -> UserContext:
-        return await self._checker(request, None)
+        # 从请求头中提取 credentials
+        from fastapi.security import HTTPAuthorizationCredentials
+
+        auth_header = request.headers.get("Authorization", "")
+        credentials = None
+        if auth_header.startswith("Bearer "):
+            credentials = HTTPAuthorizationCredentials(
+                scheme="Bearer",
+                credentials=auth_header[7:]
+            )
+
+        return await self._checker(request, credentials)
 
 
 class OrgScoped:
